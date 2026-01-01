@@ -18,7 +18,6 @@ Key Concepts:
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
-from langchain_openai import ChatOpenAI
 from typing import Literal
 import json
 import uuid
@@ -26,19 +25,15 @@ import uuid
 from app.agent.state import AgentState
 from app.agent.tools import ALL_TOOLS
 from app.agent.prompts import SYSTEM_PROMPT
-from app.config import settings
+from app.agent.llm_provider import get_llm
 
 
 # =============================================================================
 # SETUP
 # =============================================================================
 
-# Create the LLM with tool-calling capability
-llm = ChatOpenAI(
-    model=settings.openai_model,
-    api_key=settings.openai_api_key,
-    temperature=0.1,
-)
+# Create the LLM with tool-calling capability using provider factory
+llm = get_llm()
 
 # Bind the tools to the LLM - this tells the LLM what tools are available
 llm_with_tools = llm.bind_tools(ALL_TOOLS)
@@ -124,7 +119,17 @@ def format_output_node(state: AgentState) -> dict:
     final_message = "Here's what I found for you."
     for msg in reversed(messages):
         if isinstance(msg, AIMessage) and not msg.tool_calls:
-            final_message = msg.content
+            content = msg.content
+            # Handle cases where content might be a list or non-string
+            if isinstance(content, str) and content.strip():
+                final_message = content
+            elif isinstance(content, list) and len(content) > 0:
+                # Extract text from first content block if it's a list
+                first_block = content[0]
+                if isinstance(first_block, str):
+                    final_message = first_block
+                elif isinstance(first_block, dict) and "text" in first_block:
+                    final_message = first_block["text"]
             break
     
     return {

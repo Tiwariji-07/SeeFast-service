@@ -10,7 +10,7 @@ Tools for the LangGraph agent to:
 """
 
 from langchain_core.tools import tool
-from typing import Optional
+from typing import Optional, Any
 import httpx
 import json
 
@@ -132,14 +132,15 @@ async def call_api(endpoint_id: str, path_params: dict = {}, query_params: dict 
 
 
 @tool
-def format_for_widget(data: list | dict, widget_type: str, config: dict = {}) -> dict:
+def format_for_widget(data: dict, widget_type: str, config: dict = {}) -> dict:
     """
     Transform API response data into widget format.
     
     Use this to prepare data for display in the UI.
     
     Args:
-        data: The raw data from call_api
+        data: The raw data from call_api. If the data is a list/array, 
+              wrap it as {"items": [...]} before passing.
         widget_type: One of "Table", "BarChart", "LineChart", "MetricCard", "PieChart"
         config: Optional configuration (title, etc.)
     
@@ -147,14 +148,22 @@ def format_for_widget(data: list | dict, widget_type: str, config: dict = {}) ->
         Widget-ready data structure
     """
     try:
+        # Unwrap if data was passed as {"items": [...]} or {"data": [...]}
+        actual_data = data
+        if isinstance(data, dict):
+            if "items" in data and isinstance(data["items"], list):
+                actual_data = data["items"]
+            elif "data" in data and isinstance(data["data"], list):
+                actual_data = data["data"]
+        
         if widget_type == "Table":
-            return _format_table(data, config)
+            return _format_table(actual_data, config)
         elif widget_type in ["BarChart", "PieChart"]:
-            return _format_bar_chart(data, config)
+            return _format_bar_chart(actual_data, config)
         elif widget_type == "LineChart":
-            return _format_line_chart(data, config)
+            return _format_line_chart(actual_data, config)
         elif widget_type == "MetricCard":
-            return _format_metric(data, config)
+            return _format_metric(actual_data, config)
         else:
             return {"error": f"Unknown widget type: {widget_type}"}
     except Exception as e:
